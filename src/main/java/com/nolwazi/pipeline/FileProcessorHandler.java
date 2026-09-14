@@ -3,25 +3,68 @@ package com.nolwazi.pipeline;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-/**
- * Lambda handler triggered when a file is uploaded to the "uploads" S3 bucket.
- *
- * Plan:
- *   1. Read the S3 event to find which file was uploaded
- *   2. Download/process the file (exact processing TBD - see README)
- *   3. Write the result to the "processed" S3 bucket
- *   4. Log progress to CloudWatch
- *
- * Each step becomes real code over the next few commits, once the AWS
- * environment (buckets, IAM role) is set up.
- */
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+
 public class FileProcessorHandler implements RequestHandler<S3Event, String> {
+
+    private static final String PROCESSED_BUCKET = "nolwazi-pipeline-processed";
+
+    private final S3Client s3Client = S3Client.builder().build();
 
     @Override
     public String handleRequest(S3Event event, Context context) {
-        context.getLogger().log("Received S3 event: " + event.toJson());
-        // TODO: extract bucket/key from event, process file, write to output bucket
+        var logger = context.getLogger();
+
+        for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
+            String bucket = record.getS3().getBucket().getName();
+            String key = record.getS3().getObject().getKey();
+
+            logger.log("Processing uploaded file: " + key + " from bucket: " + bucket);
+
+            try {
+                HeadObjectResponse metadata = s3Client.headObject(
+                        HeadObjectRequest.builder().bucket(bucket).key(key).build()
+                );
+
+                String summary = buildSummary(key, metadata);
+                writeSummaryToProcessedBucket(key, summary);
+
+                logger.log("Successfully processed and wrote summary for: " + key);
+            } catch (Exception e) {
+                logger.log("ERROR processing " + key + ": " + e.getMessage());
+                throw new RuntimeException("Failed to process file: " + key, e);
+            }
+        }
+
         return "OK";
+    }
+
+    private String buildSummary(String key, HeadObjectResponse metadata) {
+        return "File Processing Summary\n"
+                + "------------------------\n"
+                + "File: " + key + "\n"
+                + "Size: " + metadata.contentLength() + " bytes\n"
+                + "Content-Type: " + metadata.contentType() + "\n"
+                + "Processed at: " + Instant.now() + "\n";
+    }
+
+    private void writeSummaryToProcessedBucket(String originalKey, String summary) {
+        String summaryKey = originalKey + "-summary.txt";
+
+        s3Client.putObject(
+                PutObjectRequest.builder()
+                        .bucket(PROCESSED_BUCKET)
+                        .key(summaryKey)
+                        .contentType("text/plain")
+                        .build(),
+                RequestBody.fromString(summary, StandardCharsets.UTF_8)
+        );
     }
 }

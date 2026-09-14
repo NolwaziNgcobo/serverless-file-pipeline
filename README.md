@@ -37,7 +37,7 @@ Built incrementally as each piece of AWS infrastructure gets set up:
 
 ## Tech
 
-Java 17, Maven, AWS Lambda, Amazon S3, IAM, CloudWatch.
+Java 26, Maven, AWS Lambda, Amazon S3, IAM, CloudWatch.
 
 ## Demo video
 
