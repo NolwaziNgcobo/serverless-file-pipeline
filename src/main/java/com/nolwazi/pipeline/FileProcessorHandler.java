@@ -16,7 +16,15 @@ public class FileProcessorHandler implements RequestHandler<S3Event, String> {
 
     private static final String PROCESSED_BUCKET = "nolwazi-pipeline-processed";
 
-    private final S3Client s3Client = S3Client.builder().build();
+    private S3Client s3Client;
+
+    //It only builds the real AWS client the first time it's actually needed
+    private S3Client getS3Client(){
+        if( s3Client == null){
+            s3Client = S3Client.builder().build();
+        }
+        return s3Client;
+    }
 
     @Override
     public String handleRequest(S3Event event, Context context) {
@@ -46,7 +54,7 @@ public class FileProcessorHandler implements RequestHandler<S3Event, String> {
         return "OK";
     }
 
-    private String buildSummary(String key, HeadObjectResponse metadata) {
+    String buildSummary(String key, HeadObjectResponse metadata) {
         return "File Processing Summary\n"
                 + "------------------------\n"
                 + "File: " + key + "\n"
